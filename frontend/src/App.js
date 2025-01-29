@@ -5,6 +5,10 @@ function App() {
   const [image, setImage] = useState(null);
   const [textInput, setTextInput] = useState('');
   const [response, setResponse] = useState('');
+  const [metadata, setMetadata] = useState(null);
+  const [imageSuggestions, setImageSuggestions] = useState(null);
+  const [loading, setLoading] = useState(false);  // New loading state
+  const [error, setError] = useState('');  // New error state
 
   const handleImageChange = (e) => {
     setImage(e.target.files[0]);
@@ -15,15 +19,22 @@ function App() {
   };
 
   const handleSubmitText = async () => {
+    setLoading(true);
+    setError('');
     try {
       const res = await axios.post('http://localhost:5000/chatbot', { text: textInput });
       setResponse(res.data.suggestions);
+      setLoading(false);
     } catch (err) {
+      setError('Error fetching suggestions. Please try again.');
+      setLoading(false);
       console.error(err);
     }
   };
 
   const handleSubmitImage = async () => {
+    setLoading(true);
+    setError('');
     const formData = new FormData();
     formData.append('image', image);
 
@@ -31,8 +42,12 @@ function App() {
       const res = await axios.post('http://localhost:5000/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setResponse(res.data.image_suggestions);
+      setMetadata(res.data.metadata);
+      setImageSuggestions(res.data.image_suggestions);
+      setLoading(false);
     } catch (err) {
+      setError('Error uploading image. Please try again.');
+      setLoading(false);
       console.error(err);
     }
   };
@@ -53,7 +68,7 @@ function App() {
       </div>
 
       <div className="mb-3">
-        <button className="btn btn-primary" onClick={handleSubmitText}>
+        <button className="btn btn-primary w-100" onClick={handleSubmitText}>
           Get Suggestions
         </button>
       </div>
@@ -63,14 +78,56 @@ function App() {
       </div>
 
       <div className="mb-3">
-        <button className="btn btn-success" onClick={handleSubmitImage}>
+        <button className="btn btn-success w-100" onClick={handleSubmitImage}>
           Upload Image for Analysis
         </button>
       </div>
 
+      {loading && (
+        <div className="alert alert-info" role="alert">
+          Processing your request... Please wait.
+        </div>
+      )}
+
+      {error && (
+        <div className="alert alert-danger" role="alert">
+          {error}
+        </div>
+      )}
+
       <div className="mt-4">
         <h4>Suggestions:</h4>
-        <p>{response}</p>
+        <div className="card mb-3">
+          <div className="card-body">
+            {response ? (
+              <pre className="text-break">{response}</pre>
+            ) : (
+              <p className="text-muted">No suggestions yet. Please submit a query.</p>
+            )}
+          </div>
+        </div>
+
+        <h4>Image Metadata:</h4>
+        <div className="card mb-3">
+          <div className="card-body">
+            {metadata ? (
+              <pre className="text-break">{JSON.stringify(metadata, null, 2)}</pre>
+            ) : (
+              <p className="text-muted">No metadata available. Upload an image to analyze.</p>
+            )}
+          </div>
+        </div>
+
+        <h4>Image Analysis Suggestions:</h4>
+        <div className="card">
+          <div className="card-body">
+            {imageSuggestions ? (
+              <pre className="text-break">{JSON.stringify(imageSuggestions, null, 2)}</pre>
+            ) : (
+              <p className="text-muted">No image analysis yet. Upload an image for analysis.</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

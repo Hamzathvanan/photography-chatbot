@@ -1,8 +1,12 @@
-from transformers import pipeline
+import openai
 
-# Use the correct model identifier 'gpt2'
-generator = pipeline('text-generation', model='gpt2')
-
+# Function to get suggestions from OpenAI's chat-based API
 def get_suggestions(text_input):
-    response = generator(text_input, max_length=100, num_return_sequences=1)
-    return response[0]['generated_text']
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",  # Or "gpt-4" if you have access to it
+        messages=[
+            {"role": "system", "content": "You are a helpful photography assistant."},
+            {"role": "user", "content": text_input},
+        ]
+    )
+    return response['choices'][0]['message']['content']
