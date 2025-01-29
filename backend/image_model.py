@@ -1,80 +1,195 @@
+import os
 import openai
-import torch
-from CLIP import clip
-from PIL import Image
+import base64
+import requests
+from PIL import Image, ExifTags
 import io
+import logging
+from flask import Flask, request, jsonify
 
-# Load the CLIP model and preprocess function
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model, preprocess = clip.load("ViT-B/32", device)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Function to analyze the image and generate photography tips
-def analyze_image(file):
+# Set OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+
+# Allowed image file extensions
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+
+# Initialize Flask app
+app = Flask(__name__)
+
+def is_allowed_file(filename):
+    """Check if the file has an allowed extension."""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def encode_image(file):
+    """Encode an image file to base64."""
     try:
-        # Open the image and preprocess it for CLIP
-        image = Image.open(file)
-        image_input = preprocess(image).unsqueeze(0).to(device)
+        file.seek(0)  # Reset file pointer to the beginning
 
-        # Get the image features from CLIP
-        with torch.no_grad():
-            image_features = model.encode_image(image_input)
+        # Save the uploaded file temporarily for debugging
+        with open("debug_uploaded_file.png", "wb") as debug_file:
+            debug_file.write(file.read())
 
-        # Normalize the features to compare with text descriptions later
-        image_features /= image_features.norm(dim=-1, keepdim=True)
+        # Reset file pointer again
+        file.seek(0)
 
-        # Creating a more detailed description based on the image features
-        description_prompt = "Describe the key features of this image in photography-related terms (lighting, mood, composition, scene type)."
+        # Open and verify the image
+        img = Image.open(file)
+        img.verify()  # Verify the image (raises an exception if invalid)
 
-        # Create a prompt to get detailed camera settings and composition suggestions
-        prompt = f"""
-        You are a professional photographer. Based on this image description: "{description_prompt}",
-        provide the following suggestions:
-        1. Camera Settings (Lens, Aperture, Shutter Speed, ISO, White Balance)
-        2. Lighting Setup (Type of Light, Number of Lights, Placement)
-        3. Composition Techniques (Rule of Thirds, Symmetry, Leading Lines)
-        4. Additional Considerations (Post-Processing, Motion Blur, etc.)
+        # Reopen the image after verification
+        img = Image.open(file)
+        img = img.convert("RGB")  # Convert to RGB to avoid format issues
 
-        Please provide specific lens models, aperture ranges, shutter speeds, ISO values, and specific lighting setups. Your recommendations should also include any tips for capturing similar or better results in the future.
+        # Save the image to a BytesIO object in memory
+        with io.BytesIO() as output:
+            img.save(output, format='PNG')
+            image_data = base64.b64encode(output.getvalue()).decode('utf-8')
+
+        return image_data
+    except Exception as e:
+        logging.error(f"Error encoding image: {e}")
+        return None
+
+def analyze_image(file):
+    """Analyze an image using OpenAI's GPT-4 Vision model."""
+    try:
+        if not is_allowed_file(file.filename):
+            return "Unsupported file format. Please upload an image file."
+
+        # Check MIME type
+        if file.mimetype not in ['image/png', 'image/jpeg', 'image/gif', 'image/bmp']:
+            return "Unsupported MIME type. Please upload a valid image file."
+
+        # Encode the image to base64
+        base64_image = encode_image(file)
+        if base64_image is None:
+            return "Error encoding image."
+
+        # Prepare the payload for OpenAI API
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {openai.api_key}"
+        }
+
+        # Refined prompt to get detailed photography analysis
+        prompt = """
+        Analyze this photograph and provide detailed recommendations for replicating or improving it. Include the following:
+        1. **Camera Settings**:
+           - Lens: Recommend the type of lens (e.g., 50mm f/1.8) and focal length.
+           - Aperture: Suggest the ideal f-stop for depth of field.
+           - Shutter Speed: Recommend the shutter speed to freeze motion or create motion blur.
+           - ISO: Suggest the ISO setting for proper exposure.
+           - White Balance: Recommend the white balance setting for accurate colors.
+        2. **Lighting Setup**:
+           - Type of Light: Describe the lighting (e.g., natural, artificial).
+           - Number of Lights: Suggest the number of light sources.
+           - Placement: Recommend the placement of lights for optimal illumination.
+        3. **Composition Techniques**:
+           - Rule of Thirds: Explain how to use the rule of thirds.
+           - Symmetry and Framing: Suggest how to frame the subject.
+           - Leading Lines: Identify leading lines in the image.
+           - Focus on Subjects: Explain how to keep the subject in focus.
+        4. **Post-Processing**:
+           - Color Grading: Suggest adjustments for colors and tones.
+           - Brightness/Contrast: Recommend adjustments for brightness and contrast.
+           - Motion Blur: Explain how to add or reduce motion blur.
+           - Background Enhancement: Suggest ways to enhance the background.
         """
 
-        # Use GPT-4/3.5 to generate the recommendations
-        suggestions = openai.ChatCompletion.create(
-            model="gpt-4",  # Or use "gpt-3.5-turbo" based on availability
-            messages=[
-                {"role": "system", "content": "You are an expert photographer."},
-                {"role": "user", "content": prompt}
+        payload = {
+            "model": "gpt-4o",  # Use the correct model name
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
             ],
-            max_tokens=350,  # Allow for detailed suggestions
-            temperature=0.7  # Adjust for creativity
-        )
+            "max_tokens": 300  # Increase max_tokens for detailed responses
+        }
 
-        # Return the formatted suggestions
-        return suggestions['choices'][0]['message']['content'].strip()
+        # Send the request to OpenAI API
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+
+        # Handle the response
+        if response.status_code == 200:
+            data = response.json()
+            image_analysis = data['choices'][0]['message']['content']
+            return image_analysis
+        elif response.status_code == 429:
+            return "API rate limit exceeded. Please try again later."
+        elif response.status_code == 401:
+            return "Invalid API key. Please check your OpenAI API key."
+        else:
+            return f"Error {response.status_code}: {response.text}"
 
     except Exception as e:
-        print(f"Error processing the image: {e}")
+        logging.error(f"Error processing the image: {e}")
         return "Error generating suggestions. Please try again."
 
-# Function to extract metadata from the image (for further analysis)
 def extract_metadata(file):
+    """Extract metadata (EXIF data) from an image."""
     try:
-        # Extract metadata (EXIF data) using PIL
+        file.seek(0)  # Reset file pointer to the beginning
         image = Image.open(file)
-        exif_data = image._getexif()  # Extract EXIF data (metadata)
-
+        exif_data = image._getexif()
         metadata = {}
 
         if exif_data:
-            for tag, value in exif_data.items():
-                metadata[tag] = value
+            for tag_id, value in exif_data.items():
+                tag_name = ExifTags.TAGS.get(tag_id, tag_id)  # Get human-readable tag name
+                metadata[tag_name] = value
 
-        # Include other metadata like dimensions, format
         metadata['width'], metadata['height'] = image.size
         metadata['format'] = image.format
 
         return metadata
 
     except Exception as e:
-        print(f"Error extracting metadata: {e}")
+        logging.error(f"Error extracting metadata: {e}")
         return {}
 
+# Flask route for file upload and analysis
+@app.route('/upload', methods=['POST'])
+def upload():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    if not is_allowed_file(file.filename):
+        return jsonify({"error": "Unsupported file format"}), 400
+
+    # Analyze the image
+    analysis_result = analyze_image(file)
+    if analysis_result.startswith("Error"):
+        return jsonify({"error": analysis_result}), 400
+
+    # Extract metadata
+    metadata = extract_metadata(file)
+
+    return jsonify({
+        "analysis": analysis_result,
+        "metadata": metadata
+    })
+
+# Run the Flask app
+if __name__ == '__main__':
+    app.run(debug=True)

@@ -1,3 +1,5 @@
+import os
+
 import openai
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -8,8 +10,10 @@ from image_model import analyze_image, extract_metadata
 app = Flask(__name__)
 CORS(app)
 
-# Set up OpenAI API key
-openai.api_key = "************************"  # You can also use environment variables for security
+# Set OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
 
 
 @app.route('/chatbot', methods=['POST'])

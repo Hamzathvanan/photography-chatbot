@@ -5,7 +5,7 @@ def get_suggestions(text_input):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",  # Or "gpt-4" if you have access to it
         messages=[
-            {"role": "system", "content": "You are a helpful photography assistant."},
+            {"role": "system", "content": "You are a helpful and a pro level photography assistant."},
             {"role": "user", "content": text_input},
         ]
     )
