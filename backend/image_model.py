@@ -143,7 +143,7 @@ def analyze_image(file):
         return "Error generating suggestions. Please try again."
 
 def extract_metadata(file):
-    """Extract metadata (EXIF data) from an image."""
+    """Extract metadata (EXIF data) from an image and convert it to a JSON-serializable format."""
     try:
         file.seek(0)  # Reset file pointer to the beginning
         image = Image.open(file)
@@ -153,6 +153,15 @@ def extract_metadata(file):
         if exif_data:
             for tag_id, value in exif_data.items():
                 tag_name = ExifTags.TAGS.get(tag_id, tag_id)  # Get human-readable tag name
+
+                # Convert IFDRational and other non-serializable types to strings
+                if isinstance(value, bytes):
+                    value = value.decode('utf-8', errors='replace')  # Decode bytes to string
+                elif isinstance(value, (int, float, str)):
+                    pass  # Already serializable
+                else:
+                    value = str(value)  # Convert other types to string
+
                 metadata[tag_name] = value
 
         metadata['width'], metadata['height'] = image.size
