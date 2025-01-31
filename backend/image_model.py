@@ -120,7 +120,7 @@ def analyze_image(file):
                     ]
                 }
             ],
-            "max_tokens": 300  # Increase max_tokens for detailed responses
+            "max_tokens": 500  # Increase max_tokens for detailed responses
         }
 
         # Send the request to OpenAI API
@@ -172,33 +172,3 @@ def extract_metadata(file):
     except Exception as e:
         logging.error(f"Error extracting metadata: {e}")
         return {}
-
-# Flask route for file upload and analysis
-@app.route('/upload', methods=['POST'])
-def upload():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
-
-    if not is_allowed_file(file.filename):
-        return jsonify({"error": "Unsupported file format"}), 400
-
-    # Analyze the image
-    analysis_result = analyze_image(file)
-    if analysis_result.startswith("Error"):
-        return jsonify({"error": analysis_result}), 400
-
-    # Extract metadata
-    metadata = extract_metadata(file)
-
-    return jsonify({
-        "analysis": analysis_result,
-        "metadata": metadata
-    })
-
-# Run the Flask app
-if __name__ == '__main__':
-    app.run(debug=True)
