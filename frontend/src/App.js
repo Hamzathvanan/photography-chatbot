@@ -14,7 +14,7 @@ const App = () => {
 
   return (
     <Router>
-      <Navbar />
+      <Navbar isLoggedIn={isLoggedIn} setIsLoggedIn={setIsLoggedIn} />
       <Routes>
         <Route path="/" element={<LoginOrRegister setIsLoggedIn={setIsLoggedIn} />} />
         <Route path="/welcome" element={<WelcomePage />} />

@@ -1,8 +1,24 @@
 import React from "react";
 import { AppBar, Toolbar, Typography, Button } from "@mui/material";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
-const Navbar = () => {
+const Navbar = ({ isLoggedIn, setIsLoggedIn }) => {
+  const navigate = useNavigate();
+
+  const handleGetStarted = () => {
+    if (isLoggedIn) {
+      navigate("/welcome");  // Redirect to WelcomePage if logged in
+    } else {
+      navigate("/login");  // Redirect to Login Page if not logged in
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setIsLoggedIn(false);
+    navigate("/");
+  };
+
   return (
     <AppBar position="static">
       <Toolbar>
@@ -12,9 +28,14 @@ const Navbar = () => {
         <Button color="inherit" component={Link} to="/">
           Home
         </Button>
-        <Button color="inherit" component={Link} to="/choice">
+        <Button color="inherit" onClick={handleGetStarted}>
           Get Started
         </Button>
+        {isLoggedIn && (
+          <Button color="inherit" onClick={handleLogout}>
+            Logout
+          </Button>
+        )}
       </Toolbar>
     </AppBar>
   );
