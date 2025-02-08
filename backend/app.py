@@ -13,6 +13,7 @@ import base64
 
 from chatbot_model import get_suggestions
 from image_model import extract_metadata, analyze_image
+from edit_image import apply_edits
 
 app = Flask(__name__)
 CORS(app)
@@ -53,18 +54,6 @@ def generate_token(user_id):
     }
     return jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
 
-# Helper function to apply brightness, contrast, and sharpness
-def apply_edits(image, edits):
-    enhancer = ImageEnhance.Brightness(image)
-    image = enhancer.enhance(edits.get('brightness', 1))
-
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(edits.get('contrast', 1))
-
-    enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(edits.get('sharpness', 1))
-
-    return image
 
 # User Registration Endpoint
 @app.route('/register', methods=['POST'])
@@ -174,15 +163,15 @@ def upload_and_edit():
     image_file = request.files['image']
     image = Image.open(image_file)
 
-    # Get edit parameters
-    brightness = float(request.form.get('brightness', 1))
-    contrast = float(request.form.get('contrast', 1))
-    sharpness = float(request.form.get('sharpness', 1))
+    # Get edit parameters from the form data
+    edits = {
+        'brightness': float(request.form.get('brightness', 1)),
+        'contrast': float(request.form.get('contrast', 1)),
+        'sharpness': float(request.form.get('sharpness', 1))
+    }
 
-    # Apply the edits
-    image = ImageEnhance.Brightness(image).enhance(brightness)
-    image = ImageEnhance.Contrast(image).enhance(contrast)
-    image = ImageEnhance.Sharpness(image).enhance(sharpness)
+    # Apply the edits using the apply_edits function
+    image = apply_edits(image, edits)
 
     # Save the edited image to a byte stream
     img_io = io.BytesIO()
