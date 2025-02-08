@@ -24,14 +24,41 @@ const ImageEditingPage = () => {
         const img = new Image();
         img.src = reader.result;
         img.onload = () => {
-          // Create Fabric.js Canvas instance
-          const canvas = new fabric.Canvas(canvasRef.current);  // Correct usage
-          const fabricImage = new fabric.Image(img);  // Correct usage
+          const canvas = new fabric.Canvas(canvasRef.current);
+
+          // Dynamically set the canvas width and height based on the image size
+          canvas.setWidth(img.width);  // Set canvas width to image width
+          canvas.setHeight(img.height); // Set canvas height to image height
+
+          // Create a Fabric.js image instance
+          const fabricImage = new fabric.Image(img);
+
+          // Get the aspect ratio of the image
+          const imgAspectRatio = img.width / img.height;
+          const canvasAspectRatio = canvas.width / canvas.height;
+
+          // Scale the image proportionally to fit the canvas without distortion
+          let scaleX = 1;
+          let scaleY = 1;
+
+          if (imgAspectRatio > canvasAspectRatio) {
+            // If the image is wider than the canvas, scale based on width
+            scaleX = canvas.width / img.width;
+            scaleY = scaleX; // Keep the aspect ratio
+          } else {
+            // If the image is taller than the canvas, scale based on height
+            scaleY = canvas.height / img.height;
+            scaleX = scaleY; // Keep the aspect ratio
+          }
+
+          // Apply the correct scale to the image
+          fabricImage.scale(scaleX);
+
+          // Clear any existing content and set the new background image
           canvas.clear();
-          // Use setBackgroundImage method to set the background image
           canvas.setBackgroundImage(fabricImage, canvas.renderAll.bind(canvas), {
-            scaleX: canvas.width / fabricImage.width,
-            scaleY: canvas.height / fabricImage.height,
+            scaleX: scaleX,
+            scaleY: scaleY,
           });
         };
       };
@@ -40,31 +67,30 @@ const ImageEditingPage = () => {
   }, [image]);
 
   const handleSubmit = async () => {
-  setLoading(true);
-  setError("");
+    setLoading(true);
+    setError("");
 
-  // Create a new FormData instance
-  const formData = new FormData();
-  formData.append("image", image);
+    // Create a new FormData instance
+    const formData = new FormData();
+    formData.append("image", image);
 
-  // Append edits to FormData (this was missing before)
-  formData.append("brightness", brightness);
-  formData.append("contrast", contrast);
-  formData.append("sharpness", sharpness);
+    // Append edits to FormData (this was missing before)
+    formData.append("brightness", brightness);
+    formData.append("contrast", contrast);
+    formData.append("sharpness", sharpness);
 
-  try {
-    const res = await axios.post("http://localhost:5000/upload_and_edit", formData, {
-      headers: { "Content-Type": "multipart/form-data" }
-    });
-    setEditedImage(res.data.image);
-    setLoading(false);
-  } catch (err) {
-    setError("Error uploading or editing image. Please try again.");
-    setLoading(false);
-    console.error("Error details:", err);  // Log the error for debugging
-  }
-};
-
+    try {
+      const res = await axios.post("http://localhost:5000/upload_and_edit", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setEditedImage(res.data.image);
+      setLoading(false);
+    } catch (err) {
+      setError("Error uploading or editing image. Please try again.");
+      setLoading(false);
+      console.error("Error details:", err);  // Log the error for debugging
+    }
+  };
 
   const handleEditChange = (editType, value) => {
     if (editType === "brightness") setBrightness(value);
@@ -96,7 +122,7 @@ const ImageEditingPage = () => {
 
         <Box sx={{ marginTop: 4 }}>
           {/* Fabric.js canvas */}
-          <canvas ref={canvasRef} width="500" height="500" style={{ border: "1px solid black" }} />
+          <canvas ref={canvasRef} style={{ border: "1px solid black" }} />
         </Box>
 
         {editedImage && (
