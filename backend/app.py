@@ -1,4 +1,6 @@
 import os
+
+from PIL import ImageEnhance, Image
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mysql.connector
@@ -6,6 +8,8 @@ import bcrypt
 import jwt
 import datetime
 import openai
+import io
+import base64
 
 from chatbot_model import get_suggestions
 from image_model import extract_metadata, analyze_image
@@ -48,6 +52,19 @@ def generate_token(user_id):
         'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expires in 1 hour
     }
     return jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+# Helper function to apply brightness, contrast, and sharpness
+def apply_edits(image, edits):
+    enhancer = ImageEnhance.Brightness(image)
+    image = enhancer.enhance(edits.get('brightness', 1))
+
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(edits.get('contrast', 1))
+
+    enhancer = ImageEnhance.Sharpness(image)
+    image = enhancer.enhance(edits.get('sharpness', 1))
+
+    return image
 
 # User Registration Endpoint
 @app.route('/register', methods=['POST'])
@@ -144,6 +161,38 @@ def upload_image():
         'metadata': metadata,
         'image_suggestions': image_suggestions
     })
+
+
+# Image Upload and Editing Endpoint
+@app.route('/upload_and_edit', methods=['POST'])
+def upload_and_edit():
+    # Check if an image was uploaded
+    if 'image' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    # Get the image from the request
+    image_file = request.files['image']
+    image = Image.open(image_file)
+
+    # Get edit parameters
+    brightness = float(request.form.get('brightness', 1))
+    contrast = float(request.form.get('contrast', 1))
+    sharpness = float(request.form.get('sharpness', 1))
+
+    # Apply the edits
+    image = ImageEnhance.Brightness(image).enhance(brightness)
+    image = ImageEnhance.Contrast(image).enhance(contrast)
+    image = ImageEnhance.Sharpness(image).enhance(sharpness)
+
+    # Save the edited image to a byte stream
+    img_io = io.BytesIO()
+    image.save(img_io, 'PNG')
+    img_io.seek(0)
+
+    # Encode the image to base64
+    img_base64 = base64.b64encode(img_io.getvalue()).decode('utf-8')
+
+    return jsonify({'image': img_base64})
 
 if __name__ == '__main__':
     app.run(debug=True)

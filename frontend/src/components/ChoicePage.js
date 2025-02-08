@@ -27,6 +27,15 @@ const ChoicePage = () => {
         >
           Analyze an Image
         </Button>
+         <Button
+          variant="contained"
+          color="secondary"
+          size="large"
+          onClick={() => navigate("/edit-image")}
+          sx={{ margin: 2 }}
+        >
+          Edit Image
+        </Button>
         <Button
           variant="contained"
           color="secondary"
