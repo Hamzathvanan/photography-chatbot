@@ -167,7 +167,10 @@ def upload_and_edit():
     edits = {
         'brightness': float(request.form.get('brightness', 1)),
         'contrast': float(request.form.get('contrast', 1)),
-        'sharpness': float(request.form.get('sharpness', 1))
+        'saturation': float(request.form.get('saturation', 1)),
+        'exposure': float(request.form.get('exposure', 1)),
+        'hue': float(request.form.get('hue', 0)),
+        'vibrancy': float(request.form.get('vibrancy', 1))  # Add vibrancy
     }
 
     # Apply the edits using the apply_edits function
