@@ -40,6 +40,15 @@ const ChoicePage = () => {
           variant="contained"
           color="secondary"
           size="large"
+          onClick={() => navigate("/image-caption-generator")}
+          sx={{ margin: 2 }}
+        >
+          Generate Caption
+        </Button>
+        <Button
+          variant="contained"
+          color="secondary"
+          size="large"
           onClick={() => navigate("/chat")}
           sx={{ margin: 2 }}
         >

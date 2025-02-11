@@ -1,1 +1,3 @@
 frontend/node_modules/
+backend/coco/
+backend/trained_caption_model/

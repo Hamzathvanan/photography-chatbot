@@ -9,6 +9,7 @@ import ChatPage from "./components/ChatPage";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ImageEditingPage from "./components/ImageEditingPage";
+import ImageCaptionPage from "./components/ImageCaptionPage";
 
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -22,6 +23,7 @@ const App = () => {
         <Route path="/choice" element={<ChoicePage />} />
         <Route path="/image-processing" element={<ImageProcessingPage />} />
         <Route path="/edit-image" element={<ImageEditingPage />} />
+        <Route path="/image-caption-generator" element={<ImageCaptionPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/register" element={<Register setIsLoggedIn={setIsLoggedIn} />} />
         <Route path="/login" element={<Login setIsLoggedIn={setIsLoggedIn} />} />

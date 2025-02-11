@@ -10,6 +10,9 @@ import datetime
 import openai
 import io
 import base64
+import torch
+
+from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, AutoTokenizer
 
 from chatbot_model import get_suggestions
 from image_model import extract_metadata, analyze_image
@@ -34,6 +37,15 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 if not openai.api_key:
     raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
 
+# Load the trained model and tokenizer
+model = VisionEncoderDecoderModel.from_pretrained("trained_caption_model")
+feature_extractor = ViTFeatureExtractor.from_pretrained("trained_caption_model")
+tokenizer = AutoTokenizer.from_pretrained("trained_caption_model")
+
+# Set up device (GPU or CPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
 # Helper function to connect to MySQL
 def get_db_connection():
     return mysql.connector.connect(**db_config)
@@ -53,6 +65,22 @@ def generate_token(user_id):
         'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expires in 1 hour
     }
     return jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+
+# Function to generate captions and hashtags
+def generate_caption_and_hashtags(image_path):
+    # Load and preprocess the image
+    image = Image.open(image_path).convert("RGB")
+    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
+
+    # Generate caption
+    output_ids = model.generate(pixel_values, max_length=50, num_beams=4, early_stopping=True)
+    caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+    # Generate hashtags (simplified version: take the first 10 words from the caption)
+    hashtags = " ".join([f"#{word}" for word in caption.split()[:10]])
+
+    return caption, hashtags
 
 
 # User Registration Endpoint
@@ -185,6 +213,29 @@ def upload_and_edit():
     img_base64 = base64.b64encode(img_io.getvalue()).decode('utf-8')
 
     return jsonify({'image': img_base64})
+
+# Endpoint to upload image and generate caption and hashtags
+@app.route('/generate_caption_and_hashtags', methods=['POST'])
+def generate_caption_and_hashtags_api():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    file = request.files['image']
+    image_path = f"temp_{file.filename}"
+    file.save(image_path)
+
+    caption, hashtags = generate_caption_and_hashtags(image_path)
+
+    return jsonify({
+        "Instagram": {
+            "Caption": caption,
+            "Hashtags": hashtags
+        },
+        "Twitter": {
+            "Caption": caption,
+            "Hashtags": hashtags
+        }
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
