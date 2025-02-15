@@ -14,9 +14,10 @@ import torch
 
 from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, AutoTokenizer
 
-from chatbot_model import get_suggestions
-from image_model import extract_metadata, analyze_image
 from edit_image import apply_edits
+from chatbot_model import get_suggestions
+from image_model import analyze_image, extract_metadata, use_own_model_for_suggestions
+from chatbot_model import get_suggestions
 
 app = Flask(__name__)
 CORS(app)
@@ -133,6 +134,21 @@ def login():
             return jsonify({'error': 'Invalid username or password'}), 401
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Image Upload Endpoint to use own model
+@app.route('/upload_using_own_model', methods=['POST'])
+def upload_using_own_model():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # Use the custom-trained model to get suggestions
+    image_suggestions = use_own_model_for_suggestions(file)
+
+    return jsonify({'image_suggestions': image_suggestions})
 
 # Protected Route Example
 @app.route('/protected', methods=['GET'])

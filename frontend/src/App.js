@@ -10,6 +10,7 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ImageEditingPage from "./components/ImageEditingPage";
 import ImageCaptionPage from "./components/ImageCaptionPage";
+import ImageModelAnalysisPage from "./components/ImageModelAnalysisPage";
 
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -22,6 +23,7 @@ const App = () => {
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/choice" element={<ChoicePage />} />
         <Route path="/image-processing" element={<ImageProcessingPage />} />
+        <Route path="/image-model-analysis" element={<ImageModelAnalysisPage />} />
         <Route path="/edit-image" element={<ImageEditingPage />} />
         <Route path="/image-caption-generator" element={<ImageCaptionPage />} />
         <Route path="/chat" element={<ChatPage />} />

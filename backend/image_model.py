@@ -6,6 +6,9 @@ from PIL import Image, ExifTags
 import io
 import logging
 from flask import Flask, request, jsonify
+import json
+import torch
+from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, AutoTokenizer
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,6 +23,22 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Path to save the dataset
+dataset_path = "collected_image_data.json"
+
+# Load your fine-tuned model and tokenizer
+model_path = "my_fine_tuned_model"
+model = VisionEncoderDecoderModel.from_pretrained(model_path)
+feature_extractor = ViTFeatureExtractor.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+# Set up device (GPU or CPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+# Allowed image file extensions
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 def is_allowed_file(filename):
     """Check if the file has an allowed extension."""
@@ -102,7 +121,7 @@ def analyze_image(file):
         """
 
         payload = {
-            "model": "gpt-4o",  # Use the correct model name
+            "model": "gpt-4o",  # Correct model name
             "messages": [
                 {
                     "role": "user",
@@ -130,6 +149,10 @@ def analyze_image(file):
         if response.status_code == 200:
             data = response.json()
             image_analysis = data['choices'][0]['message']['content']
+
+            # Save the image data and GPT-4 response to the dataset
+            save_data_to_dataset(base64_image, image_analysis)
+
             return image_analysis
         elif response.status_code == 429:
             return "API rate limit exceeded. Please try again later."
@@ -142,6 +165,57 @@ def analyze_image(file):
         logging.error(f"Error processing the image: {e}")
         return "Error generating suggestions. Please try again."
 
+# New method to use the custom fine-tuned model for suggestions
+def use_own_model_for_suggestions(file):
+    """Use the custom fine-tuned model to generate image suggestions."""
+    try:
+        if not is_allowed_file(file.filename):
+            return "Unsupported file format. Please upload an image file."
+
+        # Encode the image to base64
+        base64_image = encode_image(file)
+        if base64_image is None:
+            return "Error encoding image."
+
+        # Open the image and preprocess it using the feature extractor
+        image = Image.open(file).convert("RGB")
+        pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
+
+        # Generate the output from the model
+        output_ids = model.generate(pixel_values, max_length=50, num_beams=4, early_stopping=True)
+        caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        return caption
+
+    except Exception as e:
+        logging.error(f"Error using the model: {e}")
+        return "Error generating suggestions. Please try again."
+
+# Method to save the collected image data and suggestions
+def save_data_to_dataset(image_data, analysis_response):
+    """Save image data and GPT-4 response to the dataset."""
+    new_data = {
+        "image_data": image_data,
+        "suggestions": analysis_response
+    }
+
+    # Load existing dataset if available
+    if os.path.exists(dataset_path):
+        with open(dataset_path, "r") as file:
+            dataset = json.load(file)
+    else:
+        dataset = []
+
+    # Append new data to the dataset
+    dataset.append(new_data)
+
+    # Save updated dataset to file
+    with open(dataset_path, "w") as file:
+        json.dump(dataset, file, indent=4)
+
+    logging.info(f"Data saved to dataset: {dataset_path}")
+
+# Method to extract image metadata (EXIF)
 def extract_metadata(file):
     """Extract metadata (EXIF data) from an image and convert it to a JSON-serializable format."""
     try:
