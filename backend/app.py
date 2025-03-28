@@ -11,9 +11,13 @@ import openai
 import io
 import base64
 import torch
+from flask_mail import Mail, Message
+import random
+import string
 
 from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, AutoTokenizer
 
+from send_mail import send_email
 from edit_image import apply_edits
 from chatbot_model import get_suggestions
 from image_model import analyze_image, extract_metadata, use_own_model_for_suggestions
@@ -83,31 +87,119 @@ def generate_caption_and_hashtags(image_path):
 
     return caption, hashtags
 
+# Initialize Flask-Mail
+mail = Mail(app)
+mail.debug = True
 
-# User Registration Endpoint
+# Email Configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # or your email service provider
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_USERNAME'] = 'hamzathdeveloper@gmail.com'  # Add your email here
+app.config['MAIL_PASSWORD'] = 'UthayHamzath@345'  # Add your email password here
+app.config['MAIL_DEFAULT_SENDER'] = 'hamzathdeveloper@gmail.com'  # Set sender email
+
+# Helper function to generate a random verification code
+def generate_verification_code():
+    return ''.join(random.choices(string.digits, k=6))  # 6-digit code
+
+# Endpoint to register user and send verification email
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
+    email = data.get('email')
 
-    if not username or not password:
-        return jsonify({'error': 'Username and password are required'}), 400
+    if not username or not password or not email:
+        return jsonify({'error': 'Username, password, and email are required'}), 400
 
-    hashed_password = hash_password(password)
-
+    # Check if the email already exists in the database
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO users (username, password) VALUES (%s, %s)', (username, hashed_password))
-        conn.commit()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+        existing_user = cursor.fetchone()
         cursor.close()
         conn.close()
-        return jsonify({'message': 'User registered successfully'}), 201
-    except mysql.connector.IntegrityError:
-        return jsonify({'error': 'Username already exists'}), 400
+
+        if existing_user:
+            return jsonify({'error': 'Email already exists'}), 400
+
+        # Generate verification code
+        verification_code = generate_verification_code()
+
+        # Save the code in the database temporarily (for demo purposes)
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO email_verification (email, verification_code) VALUES (%s, %s)', (email, verification_code))
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            return jsonify({'error': 'Error saving verification code'}), 500
+
+        # Send verification email
+        msg = Message('Your Verification Code', recipients=[email])
+        msg.body = f'Your verification code is {verification_code}. Please use this code to complete your registration.'
+
+        # Call the send_email function and get the response
+        email_response = send_email(email, 'Your Verification Code', msg.body)
+
+        # Return the response from the email sending function
+        return email_response
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# Endpoint to verify email code
+# Endpoint to verify email code
+@app.route('/verify_email', methods=['POST'])
+def verify_email():
+    data = request.get_json()
+
+    # Extract all required fields
+    email = data.get('email')
+    verification_code = data.get('verification_code')
+    username = data.get('username')
+    password = data.get('password')
+
+    if not all([email, verification_code, username, password]):
+        return jsonify({'error': 'All fields are required'}), 400
+
+    try:
+        # Check verification code
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            'SELECT * FROM email_verification WHERE email = %s AND verification_code = %s',
+            (email, verification_code)
+        )
+        verification_entry = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if verification_entry:
+            # Create user with hashed password
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                'INSERT INTO users (username, password, email) VALUES (%s, %s, %s)',
+                (username, hash_password(password), email)
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'message': 'User registered successfully!'}), 201
+        else:
+            return jsonify({'error': 'Invalid verification code'}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # User Login Endpoint
 @app.route('/login', methods=['POST'])
