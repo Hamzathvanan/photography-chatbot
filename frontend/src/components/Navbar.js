@@ -1,14 +1,11 @@
 import React from "react";
 import { AppBar, Toolbar, Typography, Button, IconButton, Box } from "@mui/material";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CameraAlt, Login, Logout, RocketLaunch } from "@mui/icons-material";
 
 const Navbar = ({ isLoggedIn, setIsLoggedIn }) => {
   const navigate = useNavigate();
-
-  const handleGetStarted = () => {
-    navigate(isLoggedIn ? "/welcome" : "/login");
-  };
+  const location = useLocation();
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -52,36 +49,43 @@ const Navbar = ({ isLoggedIn, setIsLoggedIn }) => {
         <Box sx={{ flexGrow: 1 }} />
 
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <Button
-            component={Link}
-            to="/"
-            sx={{
-              color: "white",
-              '&:hover': {
-                background: "rgba(255,255,255,0.05)",
-              }
-            }}
-          >
-            Home
-          </Button>
+          {/* Show Home button only when not on Welcome page */}
+          {location.pathname !== "/welcome" && (
+            <Button
+              component={Link}
+              to={isLoggedIn ? "/welcome" : "/"}
+              sx={{
+                color: "white",
+                '&:hover': {
+                  background: "rgba(255,255,255,0.05)",
+                }
+              }}
+            >
+              Home
+            </Button>
+          )}
 
-          <Button
-            onClick={handleGetStarted}
-            startIcon={<RocketLaunch />}
-            sx={{
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.2)",
-              borderRadius: 2,
-              px: 3,
-              '&:hover': {
-                background: "rgba(255,255,255,0.05)",
-                borderColor: "#4ECDC4",
-              }
-            }}
-          >
-            {isLoggedIn ? "Dashboard" : "Get Started"}
-          </Button>
+          {/* Show Dashboard button only when logged in and not on Welcome/Choice pages */}
+          {isLoggedIn && !["/welcome", "/choice"].includes(location.pathname) && (
+            <Button
+              onClick={() => navigate("/choice")}
+              startIcon={<RocketLaunch />}
+              sx={{
+                color: "white",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 2,
+                px: 3,
+                '&:hover': {
+                  background: "rgba(255,255,255,0.05)",
+                  borderColor: "#4ECDC4",
+                }
+              }}
+            >
+              Dashboard
+            </Button>
+          )}
 
+          {/* Logout button */}
           {isLoggedIn && (
             <IconButton
               onClick={handleLogout}

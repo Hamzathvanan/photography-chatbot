@@ -19,7 +19,6 @@ from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, AutoTok
 
 from send_mail import send_email
 from edit_image import apply_edits
-from chatbot_model import get_suggestions
 from image_model import analyze_image, extract_metadata, use_own_model_for_suggestions
 from chatbot_model import get_suggestions
 
@@ -115,40 +114,38 @@ def register():
     if not username or not password or not email:
         return jsonify({'error': 'Username, password, and email are required'}), 400
 
-    # Check if the email already exists in the database
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
-        existing_user = cursor.fetchone()
-        cursor.close()
-        conn.close()
 
-        if existing_user:
+        # Check if email already exists in users table
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
             return jsonify({'error': 'Email already exists'}), 400
+
+        # Check if username already exists in users table
+        cursor.execute('SELECT * FROM users WHERE username = %s', (username,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Username already exists'}), 400
 
         # Generate verification code
         verification_code = generate_verification_code()
 
-        # Save the code in the database temporarily (for demo purposes)
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('INSERT INTO email_verification (email, verification_code) VALUES (%s, %s)', (email, verification_code))
-            conn.commit()
-            cursor.close()
-            conn.close()
-        except Exception as e:
-            return jsonify({'error': 'Error saving verification code'}), 500
+        # Save the code in the email_verification table
+        cursor.execute('INSERT INTO email_verification (email, verification_code) VALUES (%s, %s)', (email, verification_code))
+        conn.commit()
+        cursor.close()
+        conn.close()
 
         # Send verification email
         msg = Message('Your Verification Code', recipients=[email])
         msg.body = f'Your verification code is {verification_code}. Please use this code to complete your registration.'
-
-        # Call the send_email function and get the response
         email_response = send_email(email, 'Your Verification Code', msg.body)
 
-        # Return the response from the email sending function
         return email_response
 
     except Exception as e:

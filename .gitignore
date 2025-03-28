@@ -2,3 +2,4 @@ frontend/node_modules/
 backend/coco/
 backend/trained_caption_model/
 backend/my_fine_tuned_model/
+backend/collected_image_data.json
