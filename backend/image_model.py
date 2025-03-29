@@ -8,6 +8,7 @@ import logging
 from flask import Flask, request, jsonify
 import json
 import torch
+import re
 from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, AutoTokenizer
 
 # Set up logging
@@ -97,27 +98,28 @@ def analyze_image(file):
 
         # Refined prompt to get detailed photography analysis
         prompt = """
-        Analyze this photograph and provide detailed recommendations for replicating or improving it. Include the following:
-        1. **Camera Settings**:
-           - Lens: Recommend the type of lens (e.g., 50mm f/1.8) and focal length.
-           - Aperture: Suggest the ideal f-stop for depth of field.
-           - Shutter Speed: Recommend the shutter speed to freeze motion or create motion blur.
-           - ISO: Suggest the ISO setting for proper exposure.
-           - White Balance: Recommend the white balance setting for accurate colors.
-        2. **Lighting Setup**:
-           - Type of Light: Describe the lighting (e.g., natural, artificial).
-           - Number of Lights: Suggest the number of light sources.
-           - Placement: Recommend the placement of lights for optimal illumination.
-        3. **Composition Techniques**:
-           - Rule of Thirds: Explain how to use the rule of thirds.
-           - Symmetry and Framing: Suggest how to frame the subject.
-           - Leading Lines: Identify leading lines in the image.
-           - Focus on Subjects: Explain how to keep the subject in focus.
-        4. **Post-Processing**:
-           - Color Grading: Suggest adjustments for colors and tones.
-           - Brightness/Contrast: Recommend adjustments for brightness and contrast.
-           - Motion Blur: Explain how to add or reduce motion blur.
-           - Background Enhancement: Suggest ways to enhance the background.
+        **Analyze this photograph** and provide recommendations in this exact format:
+
+        ## Camera Settings
+        - **Lens**: [Recommendation]
+        - **Aperture**: [Recommendation]
+        - **Shutter Speed**: [Recommendation]
+        - **ISO**: [Recommendation]
+
+        ## Lighting Setup
+        - **Type**: [Recommendation]
+        - **Placement**: [Recommendation]
+        - **Modifiers**: [Recommendation]
+
+        ## Composition
+        - **Rule of Thirds**: [Analysis]
+        - **Leading Lines**: [Analysis]
+        - **Framing**: [Analysis]
+
+        ## Post-Processing
+        - **Color Grading**: [Recommendation]
+        - **Adjustments**: [Recommendation]
+        - **Enhancements**: [Recommendation]
         """
 
         payload = {
@@ -167,29 +169,75 @@ def analyze_image(file):
 
 # New method to use the custom fine-tuned model for suggestions
 def use_own_model_for_suggestions(file):
-    """Use the custom fine-tuned model to generate image suggestions."""
+    """Use the custom fine-tuned model to generate structured image suggestions."""
     try:
         if not is_allowed_file(file.filename):
-            return "Unsupported file format. Please upload an image file."
+            return jsonify({'error': 'Unsupported file format'}), 400
 
-        # Encode the image to base64
-        base64_image = encode_image(file)
-        if base64_image is None:
-            return "Error encoding image."
-
-        # Open the image and preprocess it using the feature extractor
+        # Open and preprocess the image
         image = Image.open(file).convert("RGB")
         pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
 
-        # Generate the output from the model
-        output_ids = model.generate(pixel_values, max_length=50, num_beams=4, early_stopping=True)
-        caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        # Generate caption with the custom model
+        output_ids = model.generate(
+            pixel_values,
+            max_length=200,  # Increased length for detailed analysis
+            num_beams=4,
+            early_stopping=True,
+            temperature=0.7
+        )
 
-        return caption
+        # Decode the output tokens to text
+        raw_output = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        # Convert raw output to structured format
+        structured_output = {
+            "technical_analysis": raw_output
+            # "composition_analysis": parse_composition_details(raw_output),
+            # "lighting_analysis": parse_lighting_details(raw_output),
+            # "post_processing": parse_postprocessing_details(raw_output)
+        }
+
+        return json.dumps(structured_output)
 
     except Exception as e:
         logging.error(f"Error using the model: {e}")
-        return "Error generating suggestions. Please try again."
+        return json.dumps({"error": "Analysis failed"})
+
+
+# Helper functions to structure the raw model output
+def parse_technical_details(text):
+    """Extract technical details from model output"""
+    patterns = {
+        "aperture": r"aperture (f/\d+\.?\d*)",
+        "shutter_speed": r"shutter speed (1/\d+s)",
+        "iso": r"ISO (\d+)",
+        "focal_length": r"(\d+mm) focal length"
+    }
+    return {key: re.search(pattern, text).group(1) if re.search(pattern, text) else text
+            for key, pattern in patterns.items()}
+
+
+def parse_composition_details(text):
+    """Extract composition details from model output"""
+    composition_elements = ["rule_of_thirds", "leading_lines", "symmetry", "framing"]
+    return {element: "Yes" if element.replace("_", " ") in text.lower() else text
+            for element in composition_elements}
+
+
+def parse_lighting_details(text):
+    """Extract lighting details from model output"""
+    lighting_types = ["natural", "artificial", "studio", "ambient"]
+    return {
+        "type": next((lt for lt in lighting_types if lt in text.lower()), "unknown"),
+        "direction": "Side" if "side lighting" in text.lower() else text
+    }
+
+
+def parse_postprocessing_details(text):
+    """Extract post-processing details from model output"""
+    adjustments = ["exposure", "contrast", "saturation", "sharpness"]
+    return {adj: "Adjusted" if adj in text.lower() else text for adj in adjustments}
 
 # Method to save the collected image data and suggestions
 def save_data_to_dataset(image_data, analysis_response):
